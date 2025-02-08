@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- Ensure responsive scaling -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quinn Fleming's Music Learning Tools - Visual Metronome</title>
+  <style>
+    /* Reset & Full-Height Layout */
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      background-color: #121212;
+      color: #ffffff;
+      font-family: Arial, sans-serif;
+    }
+    /* Top-level grid: Navigation + main content */
+    #page {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      height: 100vh;
+    }
+    /* Navigation Bar */
+    nav {
+      background-color: #000;
+      height: 60px; /* fixed height */
+      width: 100%;
+      padding: 10px 0;
+    }
+    .nav-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 90%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 15px;
+      height: 100%;
+    }
+    .brand {
+      display: flex;
+      flex-direction: column;
+      color: #fff;
+    }
+    .brand .small-text {
+      font-size: 1rem;
+      margin: 0;
+      color: #ccc;
+      font-style: italic;
+    }
+    .brand h1 {
+      font-size: 1.4rem;
+      margin: 0;
+      color: #fff;
+    }
+    .nav-links {
+      list-style: none;
+      display: flex;
+      gap: 15px;
+      margin: 0;
+      padding: 0;
+    }
+    .nav-links li a {
+      color: #fff;
+      text-decoration: none;
+      font-weight: bold;
+      font-size: 1rem;
+    }
+    .nav-links li a:hover {
+      text-decoration: underline;
+    }
+    /* Main Content: Grid with toolbars on top and canvas container filling remaining space */
+    #app {
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 10px;
+      width: 90%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 10px 0;
+    }
+    /* Toolbar styling */
+    #controls, #function-toolbar {
+      background-color: #004d40;
+      padding: 10px;
+      border-radius: 4px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    /* Function toolbar gets a slightly different background */
+    #function-toolbar {
+      background-color: #00332e;
+    }
+    /* In the BPM dropdown, show a visible border */
+    #tap-tempo, #sound-select, #bpm-select {
+      border: 2px solid #ffffff;
+    }
+    /* Button, Select, Range, and Color Input Styling */
+    button,
+    select,
+    input[type="range"],
+    input[type="color"] {
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 4px;
+      border: none;
+      outline: none;
+      cursor: pointer;
+      background-color: #333;
+      color: #fff;
+    }
+    /* Special styling for the Start button to make it stand out */
+    #start-stop {
+      background-color: #ff5722;
+      font-weight: bold;
+    }
+    /* Provide visual feedback on click: scale and temporary bg color change */
+    button:active,
+    select:active,
+    input:active {
+      transform: scale(0.95);
+      background-color: #666;
+      transition: transform 0.1s ease, background-color 0.1s ease;
+    }
+    /* Canvas Container fills remaining vertical space */
+    #canvas-container {
+      width: 100%;
+      background-color: #121212;
+      overflow: hidden;
+    }
+    /* The canvas fills its container exactly */
+    #metronome-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="page">
+    <!-- Navigation Bar -->
+    <nav>
+      <div class="nav-container">
+        <div class="brand">
+          <p class="small-text">Quinn Fleming's</p>
+          <h1>Music Learning Tools</h1>
+        </div>
+        <ul class="nav-links">
+          <li><a href="https://iambored456.github.io/Diatonic-Compass/" target="_blank">Diatonic Compass</a></li>
+          <li><a href="https://iambored456.github.io/Student-Notation/" target="_blank">Student Notation</a></li>
+          <li><a href="https://iambored456.github.io/Pitch-Detect/" target="_blank">Pitch Detect</a></li>
+        </ul>
+      </div>
+    </nav>
+    
+    <!-- Main App Container -->
+    <div id="app">
+      <!-- Sound Toolbar -->
+      <div id="controls">
+        <button id="tap-tempo">TAP TEMPO</button>
+        <label for="bpm-select">BPM:</label>
+        <select id="bpm-select">
+          <option value="30">30</option>
+          <option value="40">40</option>
+          <option value="50">50</option>
+          <option value="60" selected>60</option>
+          <option value="70">70</option>
+          <option value="80">80</option>
+          <option value="90">90</option>
+          <option value="100">100</option>
+          <option value="110">110</option>
+          <option value="120">120</option>
+          <option value="130">130</option>
+          <option value="140">140</option>
+          <option value="150">150</option>
+          <option value="160">160</option>
+          <option value="170">170</option>
+          <option value="180">180</option>
+        </select>
+        <button id="bpm-minus">–</button>
+        <button id="bpm-plus">+</button>
+        <button id="start-stop">Start</button>
+        <label for="sound-select">Sounds:</label>
+        <select id="sound-select"></select>
+        <label for="volume-slider">Volume:</label>
+        <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0.25">
+      </div>
+      <!-- Function Toolbar -->
+      <div id="function-toolbar">
+        <button id="ball-size-decrease">Ball Size –</button>
+        <button id="ball-size-increase">Ball Size +</button>
+        <!-- Flash Background toggle: label and toggle button -->
+        <label for="flash-toggle">Flash Background:</label>
+        <button id="flash-toggle">Off</button>
+        <!-- Path Height controls -->
+        <span>Path Height:</span>
+        <button id="path-height-decrease">–</button>
+        <button id="path-height-increase">+</button>
+        <!-- Show/Hide dashed path -->
+        <button id="toggle-path">Show Path</button>
+        <label for="left-bar-color">Left Bar:</label>
+        <input type="color" id="left-bar-color" value="#2196F3">
+        <label for="right-bar-color">Right Bar:</label>
+        <input type="color" id="right-bar-color" value="#4CAF50">
+      </div>
+      <!-- Canvas Container -->
+      <div id="canvas-container">
+        <canvas id="metronome-canvas"></canvas>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    /**********************************
+     * Global Variables & Setup
+     **********************************/
+    let canvas, ctx;
+    let BPM = 60;  // Default BPM is now 60
+    let beatInterval = 60000 / BPM;
+    const wallWidth = 50;
+    let ballRadius = 40;  // Larger default ball size
+    let amplitude = 50;
+    let ball;
+    let isPlaying = false;
+    let lastTimestamp = null;
+    let tapTimes = [];
+    // For canvas flash on beat
+    let canvasFlashEnabled = false;
+    let flashColor = null;
+    // Bar colors: primary and flash highlight (50% lighter)
+    let leftBarPrimary = "#2196F3";
+    let rightBarPrimary = "#4CAF50";
+    let leftBarHighlight = lightenColor(leftBarPrimary, 50);
+    let rightBarHighlight = lightenColor(rightBarPrimary, 50);
+    let leftBarHighlighted = false;
+    let rightBarHighlighted = false;
+    // Dashed path toggle flag
+    let showPath = false;
+    // Smiley face rotation (in radians)
+    let currentFaceAngle = 0;
+    // Audio context & volume (default 25%)
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    let volume = 0.25;
+    
+    /**********************************
+     * Synthesized Sound Generators
+     **********************************/
+    const soundGenerators = {
+      "Beep 1": function() {
+        const osc = audioContext.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, audioContext.currentTime);
+        const gain = audioContext.createGain();
+        gain.gain.setValueAtTime(volume, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(volume * 0.001, audioContext.currentTime + 0.1);
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start();
+        osc.stop(audioContext.currentTime + 0.1);
+      },
+      "Beep 2": function() {
+        const osc = audioContext.createOscillator();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(600, audioContext.currentTime);
+        const gain = audioContext.createGain();
+        gain.gain.setValueAtTime(volume, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(volume * 0.001, audioContext.currentTime + 0.1);
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start();
+        osc.stop(audioContext.currentTime + 0.1);
+      },
+      "Blip": function() {
+        const osc = audioContext.createOscillator();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(1000, audioContext.currentTime);
+        const gain = audioContext.createGain();
+        gain.gain.setValueAtTime(volume * 0.8, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(volume * 0.001, audioContext.currentTime + 0.07);
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start();
+        osc.stop(audioContext.currentTime + 0.07);
+      },
+      "Bongos 1": function() {
+        const osc = audioContext.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(150, audioContext.currentTime);
+        const gain = audioContext.createGain();
+        gain.gain.setValueAtTime(volume, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(volume * 0.001, audioContext.currentTime + 0.2);
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start();
+        osc.stop(audioContext.currentTime + 0.2);
+      },
+      "Bongos 2": function() {
+        const osc = audioContext.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(200, audioContext.currentTime);
+        const gain = audioContext.createGain();
+        gain.gain.setValueAtTime(volume, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(volume * 0.001, audioContext.currentTime + 0.2);
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start();
+        osc.stop(audioContext.currentTime + 0.2);
+      },
+      "Clap": function() {
+        const createClapBurst = (delay) => {
+          const duration = 0.02;
+          const bufferSize = Math.floor(audioContext.sampleRate * duration);
+          const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+          }
+          const noiseSource = audioContext.createBufferSource();
+          noiseSource.buffer = buffer;
+          const gain = audioContext.createGain();
+          gain.gain.setValueAtTime(volume, audioContext.currentTime + delay);
+          gain.gain.exponentialRampToValueAtTime(volume * 0.01, audioContext.currentTime + delay + duration);
+          noiseSource.connect(gain);
+          gain.connect(audioContext.destination);
+          noiseSource.start(audioContext.currentTime + delay);
+        };
+        createClapBurst(0);
+        createClapBurst(0.03);
+      },
+      "Cowbell 1": function() {
+        const osc = audioContext.createOscillator();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(800, audioContext.currentTime);
+        const filter = audioContext.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(1000, audioContext.currentTime);
+        filter.Q.setValueAtTime(10, audioContext.currentTime);
+        const gain = audioContext.createGain();
+        gain.gain.setValueAtTime(volume, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(volume * 0.001, audioContext.currentTime + 0.15);
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start();
+        osc.stop(audioContext.currentTime + 0.15);
+      },
+      "Cowbell 2": function() {
+        const osc = audioContext.createOscillator();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(900, audioContext.currentTime);
+        const filter = audioContext.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(1100, audioContext.currentTime);
+        filter.Q.setValueAtTime(8, audioContext.currentTime);
+        const gain = audioContext.createGain();
+        gain.gain.setValueAtTime(volume, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(volume * 0.001, audioContext.currentTime + 0.15);
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start();
+        osc.stop(audioContext.currentTime + 0.15);
+      },
+      "Digital": function() {
+        const osc = audioContext.createOscillator();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(1200, audioContext.currentTime);
+        const gain = audioContext.createGain();
+        gain.gain.setValueAtTime(volume, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(volume * 0.001, audioContext.currentTime + 0.08);
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start();
+        osc.stop(audioContext.currentTime + 0.08);
+      }
+    };
+    let currentSound = "Beep 1";
+    /**********************************
+     * Initialization & Adaptive Setup
+     **********************************/
+    function init() {
+      canvas = document.getElementById("metronome-canvas");
+      ctx = canvas.getContext("2d");
+      updateCanvasSize();
+      leftBoundary = wallWidth + ballRadius;
+      rightBoundary = canvas.width - wallWidth - ballRadius;
+      ball = {
+        x: leftBoundary,
+        radius: ballRadius,
+        speed: (rightBoundary - leftBoundary) / beatInterval,
+        direction: 1
+      };
+      loadSounds();
+      draw();
+    }
+    function updateCanvasSize() {
+      const container = document.getElementById("canvas-container");
+      canvas.width = container.offsetWidth;
+      canvas.height = container.offsetHeight;
+    }
+    function loadSounds() {
+      const soundSelect = document.getElementById("sound-select");
+      soundSelect.innerHTML = "";
+      for (const soundName in soundGenerators) {
+        const option = document.createElement("option");
+        option.value = soundName;
+        option.textContent = soundName;
+        if (soundName === currentSound) option.selected = true;
+        soundSelect.appendChild(option);
+      }
+    }
+    /**********************************
+     * Helper Functions
+     **********************************/
+    function updateSpeed() {
+      beatInterval = 60000 / BPM;
+      const distance = rightBoundary - leftBoundary;
+      ball.speed = distance / beatInterval;
+    }
+    function playClick() {
+      if (soundGenerators[currentSound]) {
+        soundGenerators[currentSound]();
+      }
+    }
+    function lightenColor(hex, percent) {
+      hex = hex.replace(/^#/, '');
+      let num = parseInt(hex, 16);
+      let r = (num >> 16) & 0xFF;
+      let g = (num >> 8) & 0xFF;
+      let b = num & 0xFF;
+      r = Math.min(255, Math.floor(r + (255 - r) * (percent / 100)));
+      g = Math.min(255, Math.floor(g + (255 - g) * (percent / 100)));
+      b = Math.min(255, Math.floor(b + (255 - b) * (percent / 100)));
+      return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    }
+    function drawBars() {
+      ctx.fillStyle = leftBarHighlighted ? leftBarHighlight : leftBarPrimary;
+      ctx.fillRect(0, 0, wallWidth, canvas.height);
+      ctx.fillStyle = rightBarHighlighted ? rightBarHighlight : rightBarPrimary;
+      ctx.fillRect(canvas.width - wallWidth, 0, wallWidth, canvas.height);
+    }
+    function drawPath() {
+      ctx.save();
+      ctx.setLineDash([5, 5]);
+      ctx.strokeStyle = "grey";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const steps = 50;
+      const distance = rightBoundary - leftBoundary;
+      for (let i = 0; i <= steps; i++) {
+        const x = leftBoundary + (i / steps) * distance;
+        const xRelative = x - leftBoundary;
+        const yOffset = amplitude * (1 - Math.pow(2 * xRelative / distance - 1, 2));
+        const y = canvas.height / 2 - yOffset;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+    // Draw the ball as a perfect circle with a smiley face.
+    // Its face rotates so that at the horizontal center the target angle is 0,
+    // and it linearly rotates to +π on the right and –π on the left.
+    function drawBall() {
+      const distance = rightBoundary - leftBoundary;
+      const xRelative = ball.x - leftBoundary;
+      const yOffset = amplitude * (1 - Math.pow(2 * xRelative / distance - 1, 2));
+      const ballY = canvas.height / 2 - yOffset;
+      const x_center = (leftBoundary + rightBoundary) / 2;
+      let targetAngle;
+      if (ball.x >= x_center) {
+        targetAngle = ((ball.x - x_center) / (rightBoundary - x_center)) * Math.PI;
+      } else {
+        targetAngle = -((x_center - ball.x) / (x_center - leftBoundary)) * Math.PI;
+      }
+      const smoothingFactor = 0.1;
+      currentFaceAngle += (targetAngle - currentFaceAngle) * smoothingFactor;
+      ctx.save();
+      ctx.translate(ball.x, ballY);
+      ctx.rotate(currentFaceAngle);
+      ctx.beginPath();
+      ctx.arc(0, 0, ball.radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#76FF03";
+      ctx.fill();
+      ctx.closePath();
+      const eyeOffsetX = ball.radius * 0.4;
+      const eyeOffsetY = -ball.radius * 0.3;
+      const eyeRadius = ball.radius * 0.15;
+      ctx.fillStyle = "#000";
+      ctx.beginPath();
+      ctx.arc(-eyeOffsetX, eyeOffsetY, eyeRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.closePath();
+      ctx.beginPath();
+      ctx.arc(eyeOffsetX, eyeOffsetY, eyeRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.closePath();
+      ctx.beginPath();
+      ctx.arc(0, 0, ball.radius * 0.6, 0.2 * Math.PI, 0.8 * Math.PI);
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.closePath();
+      ctx.restore();
+    }
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (canvasFlashEnabled && flashColor) {
+        ctx.fillStyle = flashColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      } else {
+        ctx.fillStyle = "#121212";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      drawBars();
+      if (showPath) drawPath();
+      drawBall();
+    }
+    function animate(timestamp) {
+      if (!isPlaying) return;
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const delta = timestamp - lastTimestamp;
+      lastTimestamp = timestamp;
+      ball.x += ball.speed * ball.direction * delta;
+      if (ball.x >= rightBoundary) {
+        ball.x = rightBoundary;
+        ball.direction = -1;
+        playClick();
+        rightBarHighlighted = true;
+        if (canvasFlashEnabled) {
+          flashColor = rightBarHighlight;
+          setTimeout(() => { flashColor = null; }, 150);
+        }
+        setTimeout(() => { rightBarHighlighted = false; }, 150);
+      } else if (ball.x <= leftBoundary) {
+        ball.x = leftBoundary;
+        ball.direction = 1;
+        playClick();
+        leftBarHighlighted = true;
+        if (canvasFlashEnabled) {
+          flashColor = leftBarHighlight;
+          setTimeout(() => { flashColor = null; }, 150);
+        }
+        setTimeout(() => { leftBarHighlighted = false; }, 150);
+      }
+      draw();
+      requestAnimationFrame(animate);
+    }
+    document.addEventListener("DOMContentLoaded", function() {
+      init();
+      window.addEventListener("resize", function() {
+        updateCanvasSize();
+        leftBoundary = wallWidth + ballRadius;
+        rightBoundary = canvas.width - wallWidth - ballRadius;
+        updateSpeed();
+        draw();
+      });
+      document.getElementById("tap-tempo").addEventListener("click", function() {
+        const now = Date.now();
+        if (tapTimes.length && now - tapTimes[tapTimes.length - 1] > 2000) tapTimes = [];
+        tapTimes.push(now);
+        if (tapTimes.length >= 2) {
+          let intervals = [];
+          for (let i = 1; i < tapTimes.length; i++) {
+            intervals.push(tapTimes[i] - tapTimes[i - 1]);
+          }
+          const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+          BPM = Math.round(60000 / avgInterval);
+          updateSpeed();
+          document.getElementById("bpm-select").value = BPM;
+        }
+      });
+      document.getElementById("bpm-select").addEventListener("change", function() {
+        BPM = parseInt(this.value);
+        updateSpeed();
+      });
+      document.getElementById("bpm-plus").addEventListener("click", function() {
+        BPM++;
+        updateSpeed();
+        document.getElementById("bpm-select").value = BPM;
+      });
+      document.getElementById("bpm-minus").addEventListener("click", function() {
+        BPM = Math.max(1, BPM - 1);
+        updateSpeed();
+        document.getElementById("bpm-select").value = BPM;
+      });
+      document.getElementById("start-stop").addEventListener("click", function() {
+        if (!isPlaying) {
+          isPlaying = true;
+          lastTimestamp = null;
+          this.textContent = "Stop";
+          requestAnimationFrame(animate);
+        } else {
+          isPlaying = false;
+          this.textContent = "Start";
+        }
+      });
+      document.getElementById("sound-select").addEventListener("change", function() {
+        currentSound = this.value;
+      });
+      document.getElementById("volume-slider").addEventListener("input", function() {
+        volume = parseFloat(this.value);
+      });
+      document.getElementById("ball-size-increase").addEventListener("click", function() {
+        ballRadius += 2;
+        ball.radius = ballRadius;
+        leftBoundary = wallWidth + ballRadius;
+        rightBoundary = canvas.width - wallWidth - ballRadius;
+        updateSpeed();
+      });
+      document.getElementById("ball-size-decrease").addEventListener("click", function() {
+        ballRadius = Math.max(5, ballRadius - 2);
+        ball.radius = ballRadius;
+        leftBoundary = wallWidth + ballRadius;
+        rightBoundary = canvas.width - wallWidth - ballRadius;
+        updateSpeed();
+      });
+      // Flash Background toggle: update button text immediately and call draw()
+      document.getElementById("flash-toggle").addEventListener("click", function() {
+        canvasFlashEnabled = !canvasFlashEnabled;
+        this.textContent = canvasFlashEnabled ? "On" : "Off";
+        draw();
+      });
+      // Path Height controls (instead of amplitude buttons)
+      document.getElementById("path-height-increase").addEventListener("click", function() {
+        amplitude += 10;
+        draw();
+      });
+      document.getElementById("path-height-decrease").addEventListener("click", function() {
+        amplitude = Math.max(0, amplitude - 10);
+        draw();
+      });
+      // Toggle dashed path visualization and update canvas immediately.
+      document.getElementById("toggle-path").addEventListener("click", function() {
+        showPath = !showPath;
+        this.textContent = showPath ? "Hide Path" : "Show Path";
+        draw();
+      });
+      document.getElementById("left-bar-color").addEventListener("input", function() {
+        leftBarPrimary = this.value;
+        leftBarHighlight = lightenColor(leftBarPrimary, 50);
+      });
+      document.getElementById("right-bar-color").addEventListener("input", function() {
+        rightBarPrimary = this.value;
+        rightBarHighlight = lightenColor(rightBarPrimary, 50);
+      });
+    });
+  </script>
+</body>
+</html>
