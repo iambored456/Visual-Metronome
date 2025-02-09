@@ -137,6 +137,35 @@
       height: 100%;
       display: block;
     }
+    /* Microbeats Toggle Styles */
+    #microbeats-toggle {
+      display: inline-flex;
+      gap: 5px;
+      align-items: center;
+    }
+    .microbeat-toggle {
+      width: 30px;
+      height: 30px;
+      background-color: #333;
+      color: #fff;
+      border: 1px solid #fff;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .microbeat-toggle.selected {
+      background-color: #ff5722;
+    }
+    /* RGB square styling for color inputs */
+    input[type="color"] {
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border: 2px solid #fff;
+      border-radius: 4px;
+      cursor: pointer;
+      background-color: transparent;
+    }
   </style>
 </head>
 <body>
@@ -149,9 +178,10 @@
           <h1>Music Learning Tools</h1>
         </div>
         <ul class="nav-links">
-          <li><a href="https://iambored456.github.io/Diatonic-Compass/" target="_blank">Diatonic Compass</a></li>
-          <li><a href="https://iambored456.github.io/Student-Notation/" target="_blank">Student Notation</a></li>
-          <li><a href="https://iambored456.github.io/Pitch-Detect/" target="_blank">Pitch Detect</a></li>
+          <li><a href="https://iambored456.github.io/Diatonic-Compass/" target="_blank">Diatonic-Compass</a></li>
+          <li><a href="https://iambored456.github.io/Student-Notation/" target="_blank">Student-Notation</a></li>
+          <li><a href="https://iambored456.github.io/Pitch-Detect/" target="_blank">Pitch-Detect</a></li>
+          <li><a href="https://iambored456.github.io/Visual-Metronome/" class="active">Visual Metronome</a></li>
         </ul>
       </div>
     </nav>
@@ -187,6 +217,14 @@
         <select id="sound-select"></select>
         <label for="volume-slider">Volume:</label>
         <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0.25">
+        <!-- New Microbeats Control (placed to the right of the volume slider) -->
+        <label for="microbeats-toggle">Microbeats:</label>
+        <div id="microbeats-toggle">
+          <button data-value="1" class="microbeat-toggle selected">1</button>
+          <button data-value="2" class="microbeat-toggle">2</button>
+          <button data-value="3" class="microbeat-toggle">3</button>
+          <button data-value="4" class="microbeat-toggle">4</button>
+        </div>
       </div>
       <!-- Function Toolbar -->
       <div id="function-toolbar">
@@ -218,11 +256,11 @@
      * Global Variables & Setup
      **********************************/
     let canvas, ctx;
-    let BPM = 60;  // Default BPM is now 60
+    let BPM = 60;  // Default BPM is 60
     let beatInterval = 60000 / BPM;
     const wallWidth = 50;
     let ballRadius = 75;  // Larger default ball size
-    let amplitude = 50;
+    let amplitude = 150;
     let ball;
     let isPlaying = false;
     let lastTimestamp = null;
@@ -241,75 +279,123 @@
     let showPath = false;
     // Smiley face rotation (in radians)
     let currentFaceAngle = 0;
-    // Audio context & volume (default 25%)
+    // Audio context & volume (default 25% volume)
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
     let volume = 0.25;
+    // New global variable for microbeats. Default is 1 (one arc)
+    let microbeats = 1;
+    // Global variable to track the current segment index for subdivision sounds.
+    let lastSegmentIndex = 0;
+    
+    /**********************************
+     * Helper Functions
+     **********************************/
+    // Returns a very small value instead of 0 so that exponentialRampToValueAtTime does not throw.
+    function getSafeVolume(v) {
+      return v > 0 ? v : 0.00001;
+    }
+    
+    // Lighten a hex color by a percentage.
+    function lightenColor(hex, percent) {
+      hex = hex.replace(/^#/, '');
+      let num = parseInt(hex, 16);
+      let r = (num >> 16) & 0xFF;
+      let g = (num >> 8) & 0xFF;
+      let b = num & 0xFF;
+      r = Math.min(255, Math.floor(r + (255 - r) * (percent / 100)));
+      g = Math.min(255, Math.floor(g + (255 - g) * (percent / 100)));
+      b = Math.min(255, Math.floor(b + (255 - b) * (percent / 100)));
+      return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    }
+    
+    // Play a subdivision (microbeat) sound.
+    function playSubdivisionSound() {
+      const safeVol = getSafeVolume(volume);
+      const osc = audioContext.createOscillator();
+      osc.type = 'sine';
+      // Lower pitch than main click.
+      osc.frequency.setValueAtTime(600, audioContext.currentTime);
+      const gain = audioContext.createGain();
+      // Subdivision sound is played at roughly half the main volume.
+      gain.gain.setValueAtTime(safeVol * 0.5, audioContext.currentTime);
+      gain.gain.exponentialRampToValueAtTime(safeVol * 0.5 * 0.001, audioContext.currentTime + 0.1);
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+      osc.start();
+      osc.stop(audioContext.currentTime + 0.1);
+    }
     
     /**********************************
      * Synthesized Sound Generators
      **********************************/
     const soundGenerators = {
       "Beep 1": function() {
+        const safeVol = getSafeVolume(volume);
         const osc = audioContext.createOscillator();
         osc.type = 'sine';
         osc.frequency.setValueAtTime(800, audioContext.currentTime);
         const gain = audioContext.createGain();
-        gain.gain.setValueAtTime(volume, audioContext.currentTime);
-        gain.gain.exponentialRampToValueAtTime(volume * 0.001, audioContext.currentTime + 0.1);
+        gain.gain.setValueAtTime(safeVol, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(safeVol * 0.001, audioContext.currentTime + 0.1);
         osc.connect(gain);
         gain.connect(audioContext.destination);
         osc.start();
         osc.stop(audioContext.currentTime + 0.1);
       },
       "Beep 2": function() {
+        const safeVol = getSafeVolume(volume);
         const osc = audioContext.createOscillator();
         osc.type = 'square';
         osc.frequency.setValueAtTime(600, audioContext.currentTime);
         const gain = audioContext.createGain();
-        gain.gain.setValueAtTime(volume, audioContext.currentTime);
-        gain.gain.exponentialRampToValueAtTime(volume * 0.001, audioContext.currentTime + 0.1);
+        gain.gain.setValueAtTime(safeVol, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(safeVol * 0.001, audioContext.currentTime + 0.1);
         osc.connect(gain);
         gain.connect(audioContext.destination);
         osc.start();
         osc.stop(audioContext.currentTime + 0.1);
       },
       "Blip": function() {
+        const safeVol = getSafeVolume(volume);
         const osc = audioContext.createOscillator();
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(1000, audioContext.currentTime);
         const gain = audioContext.createGain();
-        gain.gain.setValueAtTime(volume * 0.8, audioContext.currentTime);
-        gain.gain.exponentialRampToValueAtTime(volume * 0.001, audioContext.currentTime + 0.07);
+        gain.gain.setValueAtTime(safeVol * 0.8, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(safeVol * 0.8 * 0.001, audioContext.currentTime + 0.07);
         osc.connect(gain);
         gain.connect(audioContext.destination);
         osc.start();
         osc.stop(audioContext.currentTime + 0.07);
       },
       "Bongos 1": function() {
+        const safeVol = getSafeVolume(volume);
         const osc = audioContext.createOscillator();
         osc.type = 'sine';
         osc.frequency.setValueAtTime(150, audioContext.currentTime);
         const gain = audioContext.createGain();
-        gain.gain.setValueAtTime(volume, audioContext.currentTime);
-        gain.gain.exponentialRampToValueAtTime(volume * 0.001, audioContext.currentTime + 0.2);
+        gain.gain.setValueAtTime(safeVol, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(safeVol * 0.001, audioContext.currentTime + 0.2);
         osc.connect(gain);
         gain.connect(audioContext.destination);
         osc.start();
         osc.stop(audioContext.currentTime + 0.2);
       },
       "Bongos 2": function() {
+        const safeVol = getSafeVolume(volume);
         const osc = audioContext.createOscillator();
         osc.type = 'sine';
         osc.frequency.setValueAtTime(200, audioContext.currentTime);
         const gain = audioContext.createGain();
-        gain.gain.setValueAtTime(volume, audioContext.currentTime);
-        gain.gain.exponentialRampToValueAtTime(volume * 0.001, audioContext.currentTime + 0.2);
+        gain.gain.setValueAtTime(safeVol, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(safeVol * 0.001, audioContext.currentTime + 0.2);
         osc.connect(gain);
         gain.connect(audioContext.destination);
         osc.start();
         osc.stop(audioContext.currentTime + 0.2);
       },
       "Clap": function() {
+        const safeVol = getSafeVolume(volume);
         const createClapBurst = (delay) => {
           const duration = 0.02;
           const bufferSize = Math.floor(audioContext.sampleRate * duration);
@@ -321,8 +407,8 @@
           const noiseSource = audioContext.createBufferSource();
           noiseSource.buffer = buffer;
           const gain = audioContext.createGain();
-          gain.gain.setValueAtTime(volume, audioContext.currentTime + delay);
-          gain.gain.exponentialRampToValueAtTime(volume * 0.01, audioContext.currentTime + delay + duration);
+          gain.gain.setValueAtTime(safeVol, audioContext.currentTime + delay);
+          gain.gain.exponentialRampToValueAtTime(safeVol * 0.01, audioContext.currentTime + delay + duration);
           noiseSource.connect(gain);
           gain.connect(audioContext.destination);
           noiseSource.start(audioContext.currentTime + delay);
@@ -331,6 +417,7 @@
         createClapBurst(0.03);
       },
       "Cowbell 1": function() {
+        const safeVol = getSafeVolume(volume);
         const osc = audioContext.createOscillator();
         osc.type = 'square';
         osc.frequency.setValueAtTime(800, audioContext.currentTime);
@@ -339,8 +426,8 @@
         filter.frequency.setValueAtTime(1000, audioContext.currentTime);
         filter.Q.setValueAtTime(10, audioContext.currentTime);
         const gain = audioContext.createGain();
-        gain.gain.setValueAtTime(volume, audioContext.currentTime);
-        gain.gain.exponentialRampToValueAtTime(volume * 0.001, audioContext.currentTime + 0.15);
+        gain.gain.setValueAtTime(safeVol, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(safeVol * 0.001, audioContext.currentTime + 0.15);
         osc.connect(filter);
         filter.connect(gain);
         gain.connect(audioContext.destination);
@@ -348,6 +435,7 @@
         osc.stop(audioContext.currentTime + 0.15);
       },
       "Cowbell 2": function() {
+        const safeVol = getSafeVolume(volume);
         const osc = audioContext.createOscillator();
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(900, audioContext.currentTime);
@@ -356,8 +444,8 @@
         filter.frequency.setValueAtTime(1100, audioContext.currentTime);
         filter.Q.setValueAtTime(8, audioContext.currentTime);
         const gain = audioContext.createGain();
-        gain.gain.setValueAtTime(volume, audioContext.currentTime);
-        gain.gain.exponentialRampToValueAtTime(volume * 0.001, audioContext.currentTime + 0.15);
+        gain.gain.setValueAtTime(safeVol, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(safeVol * 0.001, audioContext.currentTime + 0.15);
         osc.connect(filter);
         filter.connect(gain);
         gain.connect(audioContext.destination);
@@ -365,12 +453,13 @@
         osc.stop(audioContext.currentTime + 0.15);
       },
       "Digital": function() {
+        const safeVol = getSafeVolume(volume);
         const osc = audioContext.createOscillator();
         osc.type = 'square';
         osc.frequency.setValueAtTime(1200, audioContext.currentTime);
         const gain = audioContext.createGain();
-        gain.gain.setValueAtTime(volume, audioContext.currentTime);
-        gain.gain.exponentialRampToValueAtTime(volume * 0.001, audioContext.currentTime + 0.08);
+        gain.gain.setValueAtTime(safeVol, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(safeVol * 0.001, audioContext.currentTime + 0.08);
         osc.connect(gain);
         gain.connect(audioContext.destination);
         osc.start();
@@ -378,6 +467,7 @@
       }
     };
     let currentSound = "Beep 1";
+    
     /**********************************
      * Initialization & Adaptive Setup
      **********************************/
@@ -413,7 +503,7 @@
       }
     }
     /**********************************
-     * Helper Functions
+     * Helper Functions (continued)
      **********************************/
     function updateSpeed() {
       beatInterval = 60000 / BPM;
@@ -425,56 +515,64 @@
         soundGenerators[currentSound]();
       }
     }
-    function lightenColor(hex, percent) {
-      hex = hex.replace(/^#/, '');
-      let num = parseInt(hex, 16);
-      let r = (num >> 16) & 0xFF;
-      let g = (num >> 8) & 0xFF;
-      let b = num & 0xFF;
-      r = Math.min(255, Math.floor(r + (255 - r) * (percent / 100)));
-      g = Math.min(255, Math.floor(g + (255 - g) * (percent / 100)));
-      b = Math.min(255, Math.floor(b + (255 - b) * (percent / 100)));
-      return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-    }
+    // Draw the bars on the left and right.
     function drawBars() {
       ctx.fillStyle = leftBarHighlighted ? leftBarHighlight : leftBarPrimary;
       ctx.fillRect(0, 0, wallWidth, canvas.height);
       ctx.fillStyle = rightBarHighlighted ? rightBarHighlight : rightBarPrimary;
       ctx.fillRect(canvas.width - wallWidth, 0, wallWidth, canvas.height);
     }
+    // Draw the path – if microbeats > 1, the total path is drawn in consecutive parabolic segments.
     function drawPath() {
       ctx.save();
       ctx.setLineDash([5, 5]);
       ctx.strokeStyle = "grey";
       ctx.lineWidth = 2;
+      const totalDistance = rightBoundary - leftBoundary;
+      const segments = microbeats;
+      const stepsPerSegment = 20;
       ctx.beginPath();
-      const steps = 50;
-      const distance = rightBoundary - leftBoundary;
-      for (let i = 0; i <= steps; i++) {
-        const x = leftBoundary + (i / steps) * distance;
-        const xRelative = x - leftBoundary;
-        const yOffset = amplitude * (1 - Math.pow(2 * xRelative / distance - 1, 2));
-        const y = canvas.height / 2 - yOffset;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+      for (let seg = 0; seg < segments; seg++) {
+          const segStartX = leftBoundary + (seg * totalDistance / segments);
+          const segEndX = leftBoundary + ((seg + 1) * totalDistance / segments);
+          for (let i = 0; i <= stepsPerSegment; i++) {
+              let t = i / stepsPerSegment;
+              let x = segStartX + t * (segEndX - segStartX);
+              let yOffset = amplitude * (1 - Math.pow(2 * t - 1, 2));
+              let y = canvas.height / 2 - yOffset;
+              if (seg === 0 && i === 0) {
+                  ctx.moveTo(x, y);
+              } else {
+                  ctx.lineTo(x, y);
+              }
+          }
       }
       ctx.stroke();
       ctx.restore();
     }
-    // Draw the ball as a perfect circle with a smiley face.
-    // Its face rotates so that at the horizontal center the target angle is 0,
-    // and it linearly rotates to +π on the right and –π on the left.
+    // Draw the ball. Its vertical position is computed based on the current microbeat segment.
     function drawBall() {
-      const distance = rightBoundary - leftBoundary;
-      const xRelative = ball.x - leftBoundary;
-      const yOffset = amplitude * (1 - Math.pow(2 * xRelative / distance - 1, 2));
-      const ballY = canvas.height / 2 - yOffset;
+      const totalDistance = rightBoundary - leftBoundary;
+      let ballY;
+      if (microbeats === 1) {
+          const xRelative = ball.x - leftBoundary;
+          const yOffset = amplitude * (1 - Math.pow(2 * xRelative / totalDistance - 1, 2));
+          ballY = canvas.height / 2 - yOffset;
+      } else {
+          const segmentDistance = totalDistance / microbeats;
+          let segIndex = Math.floor((ball.x - leftBoundary) / segmentDistance);
+          if (segIndex >= microbeats) segIndex = microbeats - 1;
+          const segX = ball.x - leftBoundary - segIndex * segmentDistance;
+          const t = segX / segmentDistance;
+          const yOffset = amplitude * (1 - Math.pow(2 * t - 1, 2));
+          ballY = canvas.height / 2 - yOffset;
+      }
       const x_center = (leftBoundary + rightBoundary) / 2;
       let targetAngle;
       if (ball.x >= x_center) {
-        targetAngle = ((ball.x - x_center) / (rightBoundary - x_center)) * Math.PI;
+          targetAngle = ((ball.x - x_center) / (rightBoundary - x_center)) * Math.PI;
       } else {
-        targetAngle = -((x_center - ball.x) / (x_center - leftBoundary)) * Math.PI;
+          targetAngle = -((x_center - ball.x) / (x_center - leftBoundary)) * Math.PI;
       }
       const smoothingFactor = 0.1;
       currentFaceAngle += (targetAngle - currentFaceAngle) * smoothingFactor;
@@ -525,6 +623,23 @@
       const delta = timestamp - lastTimestamp;
       lastTimestamp = timestamp;
       ball.x += ball.speed * ball.direction * delta;
+      
+      // If using multiple microbeats, detect crossing an internal segment boundary
+      if (microbeats > 1) {
+          const totalDistance = rightBoundary - leftBoundary;
+          const segmentDistance = totalDistance / microbeats;
+          let currentSegmentIndex = Math.floor((ball.x - leftBoundary) / segmentDistance);
+          if (currentSegmentIndex >= microbeats) currentSegmentIndex = microbeats - 1;
+          // If the ball has just crossed into a new segment (and it’s not an endpoint), play the subdivision sound.
+          if (typeof lastSegmentIndex !== 'undefined' && currentSegmentIndex !== lastSegmentIndex) {
+              if (currentSegmentIndex !== 0 && currentSegmentIndex !== microbeats - 1) {
+                  playSubdivisionSound();
+              }
+          }
+          lastSegmentIndex = currentSegmentIndex;
+      }
+      
+      // Check for beat endpoints.
       if (ball.x >= rightBoundary) {
         ball.x = rightBoundary;
         ball.direction = -1;
@@ -646,6 +761,21 @@
       document.getElementById("right-bar-color").addEventListener("input", function() {
         rightBarPrimary = this.value;
         rightBarHighlight = lightenColor(rightBarPrimary, 50);
+      });
+      // Microbeats Toggle Event Listeners
+      const microbeatButtons = document.querySelectorAll(".microbeat-toggle");
+      microbeatButtons.forEach(button => {
+        button.addEventListener("click", function() {
+          const selectedValue = parseInt(this.getAttribute("data-value"));
+          microbeats = selectedValue;
+          microbeatButtons.forEach(btn => {
+            if (parseInt(btn.getAttribute("data-value")) <= selectedValue) {
+              btn.classList.add("selected");
+            } else {
+              btn.classList.remove("selected");
+            }
+          });
+        });
       });
     });
   </script>
